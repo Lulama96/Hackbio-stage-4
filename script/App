@@ -1,0 +1,88 @@
+
+#load the needed packages:
+library(BiocManager)
+# Install necessary Bioconductor packages
+if (!require(TCGAbiolinks)) BiocManager::install("TCGAbiolinks")
+if (!require(EDASeq)) BiocManager::install("EDASeq")
+
+library(TCGAbiolinks)
+library(dplyr)
+library(shiny)
+library(shinydashboard)
+library(shinythemes)
+library(EDASeq)
+library(rsconnect)
+
+
+#organisms_data frame
+org_df <- data.frame(id = 1:7, 
+                     scientific_name = c("Homo sapiens", "Anopheles gambiae","Mus musculus", "Arabidopsis thaliana", "Passer domesticus", "Panthera leo", "Giraffa camelopardalis"),
+                     common_name = c("Human", "African malaria mosquito", "House mouse", "Thale cress", "Common sparrow", "African lion", "Northern giraffe"),
+                     ncbi_tax_id = c("9606", "7165", "10090", "3702", "48849", "9689", "9894"),
+                     stringsAsFactors = FALSE)
+#UI SERVER
+ui <- fluidPage(
+  theme = shinytheme("cerulean"),
+  titlePanel("Functional Enrichment Analysis App"), 
+  sidebarLayout(
+    sidebarPanel(
+      textAreaInput("gene_list", "Paste your genes here(comma-separated):", "", rows = 5),
+      actionButton("analyze", "Run Enrichment Analysis")
+    ),
+    
+    mainPanel(
+      plotOutput("enrichment_plot")
+    )      
+  )
+)
+
+#Server 
+server <- function(input, output) {
+  
+  
+  
+  #reactive gene list, convert the user input (comma-separated) into a list
+  gene_list <- reactive({
+    req(input$gene_list)  # Ensure input is provided
+    genes <- strsplit(input$gene_list, ",")[[1]]
+    trimws(genes)  # Trim whitespace from the gene names
+  }) 
+  
+  # Perform enrichment analysis when the button is clicked
+  enrich_result <- eventReactive(input$analyze, {
+    validate(need(length(gene_list()) > 0, "Please provide a list of genes."))
+    
+    # Run the enrichment analysis using the gene list
+    TCGAanalyze_EAcomplete(
+      TFname = "Example list of genes", 
+      RegulonList = gene_list()
+    )
+  })
+  
+  #Section for making barplot with TCGAvisualize_EAbarplot
+  output$enrichment_plot <- renderPlot({
+      req(enrich_result())  # Ensure analysis is done
+      
+    TCGAvisualize_EAbarplot(
+      tf = "Example list of genes",
+      GOMFTab = enrich_result()$ResMF, #this will generate molecular function results
+      GOBPTab = enrich_result()$ResBP, #this will generate biological process results
+      GOCCTab = enrich_result()$ResCC, #this will generate cellular component results
+      PathTab = enrich_result()$ResPat,#this will generate pathway term results
+      nBar = 10,
+      nRGTab = NULL,
+      filename = NULL,
+      text.size = 1,
+      mfrow = c(2,2), #will give 2 rows and 2 column
+      xlim = NULL,
+      color = c("orange","cyan", "green", "yellow" )
+    )
+  })
+  
+}  
+
+
+shinyApp(ui = ui, server = server)
+
+
+
